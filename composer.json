@@ -1,0 +1,16 @@
+{
+    "name": "monfo/inclusion_laboral2",
+    "autoload": {
+        "psr-4": {
+            "Monfo\\InclusionLaboral2\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Nicolas"
+        }
+    ],
+    "require-dev": {
+        "phpunit/phpunit": "11"
+    }
+}
