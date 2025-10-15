@@ -1,0 +1,1581 @@
+<?php
+// ========================================
+// CONFIGURACIÓN DE BASE DE DATOS
+// ========================================
+class Database {
+    private static $instance = null;
+    private $connection;
+    
+    private function __construct() {
+        $host = 'localhost';
+        $dbname = 'app_empleo';
+        $username = 'root';
+        $password = '';
+        
+        try {
+            $this->connection = new PDO(
+                "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
+                $username,
+                $password,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+            );
+        } catch(PDOException $e) {
+            die("Error de conexión: " . $e->getMessage());
+        }
+    }
+    
+    public static function getInstance() {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    public function getConnection() {
+        return $this->connection;
+    }
+}
+
+// ========================================
+// ENTIDADES
+// ========================================
+
+// Entidad Curso
+class Curso {
+    private $id;
+    private $titulo;
+    private $descripcion;
+    private $duracion_horas;
+    private $empresa_id;
+    private $activo;
+    private $fecha_creacion;
+    private $fecha_actualizacion;
+    
+    public function __construct() {
+        $this->activo = true;
+        $this->fecha_creacion = date('Y-m-d H:i:s');
+    }
+    
+    // Getters
+    public function getId() { return $this->id; }
+    public function getTitulo() { return $this->titulo; }
+    public function getDescripcion() { return $this->descripcion; }
+    public function getDuracionHoras() { return $this->duracion_horas; }
+    public function getEmpresaId() { return $this->empresa_id; }
+    public function isActivo() { return $this->activo; }
+    public function getFechaCreacion() { return $this->fecha_creacion; }
+    public function getFechaActualizacion() { return $this->fecha_actualizacion; }
+    
+    // Setters
+    public function setId($id) { $this->id = $id; }
+    public function setTitulo($titulo) { $this->titulo = $titulo; }
+    public function setDescripcion($descripcion) { $this->descripcion = $descripcion; }
+    public function setDuracionHoras($duracion) { $this->duracion_horas = $duracion; }
+    public function setEmpresaId($empresa_id) { $this->empresa_id = $empresa_id; }
+    public function setActivo($activo) { $this->activo = $activo; }
+    public function setFechaCreacion($fecha) { $this->fecha_creacion = $fecha; }
+    public function setFechaActualizacion($fecha) { $this->fecha_actualizacion = $fecha; }
+}
+
+// Entidad Inscripcion
+class Inscripcion {
+    private $id;
+    private $curso_id;
+    private $usuario_id;
+    private $fecha_inscripcion;
+    private $fecha_inicio;
+    private $fecha_completado;
+    private $progreso;
+    private $estado; // 'inscrito', 'en_progreso', 'completado', 'abandonado'
+    
+    public function __construct() {
+        $this->fecha_inscripcion = date('Y-m-d H:i:s');
+        $this->progreso = 0;
+        $this->estado = 'inscrito';
+    }
+    
+    // Getters
+    public function getId() { return $this->id; }
+    public function getCursoId() { return $this->curso_id; }
+    public function getUsuarioId() { return $this->usuario_id; }
+    public function getFechaInscripcion() { return $this->fecha_inscripcion; }
+    public function getFechaInicio() { return $this->fecha_inicio; }
+    public function getFechaCompletado() { return $this->fecha_completado; }
+    public function getProgreso() { return $this->progreso; }
+    public function getEstado() { return $this->estado; }
+    
+    // Setters
+    public function setId($id) { $this->id = $id; }
+    public function setCursoId($curso_id) { $this->curso_id = $curso_id; }
+    public function setUsuarioId($usuario_id) { $this->usuario_id = $usuario_id; }
+    public function setFechaInscripcion($fecha) { $this->fecha_inscripcion = $fecha; }
+    public function setFechaInicio($fecha) { $this->fecha_inicio = $fecha; }
+    public function setFechaCompletado($fecha) { $this->fecha_completado = $fecha; }
+    public function setProgreso($progreso) { $this->progreso = $progreso; }
+    public function setEstado($estado) { $this->estado = $estado; }
+}
+
+// Entidad Certificado
+class Certificado {
+    private $id;
+    private $codigo_unico;
+    private $inscripcion_id;
+    private $usuario_id;
+    private $curso_id;
+    private $fecha_emision;
+    private $url_validacion;
+    
+    public function __construct() {
+        $this->codigo_unico = $this->generarCodigoUnico();
+        $this->fecha_emision = date('Y-m-d H:i:s');
+    }
+    
+    private function generarCodigoUnico() {
+        return strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 12));
+    }
+    
+    // Getters
+    public function getId() { return $this->id; }
+    public function getCodigoUnico() { return $this->codigo_unico; }
+    public function getInscripcionId() { return $this->inscripcion_id; }
+    public function getUsuarioId() { return $this->usuario_id; }
+    public function getCursoId() { return $this->curso_id; }
+    public function getFechaEmision() { return $this->fecha_emision; }
+    public function getUrlValidacion() { return $this->url_validacion; }
+    
+    // Setters
+    public function setId($id) { $this->id = $id; }
+    public function setCodigoUnico($codigo) { $this->codigo_unico = $codigo; }
+    public function setInscripcionId($id) { $this->inscripcion_id = $id; }
+    public function setUsuarioId($id) { $this->usuario_id = $id; }
+    public function setCursoId($id) { $this->curso_id = $id; }
+    public function setFechaEmision($fecha) { $this->fecha_emision = $fecha; }
+    public function setUrlValidacion($url) { $this->url_validacion = $url; }
+}
+
+// ========================================
+// INTERFACES DAO
+// ========================================
+
+interface ICursoDAO {
+    public function crear(Curso $curso);
+    public function obtenerPorId($id);
+    public function obtenerTodos();
+    public function obtenerPorEmpresa($empresa_id);
+    public function actualizar(Curso $curso);
+    public function eliminar($id);
+    public function obtenerActivos();
+}
+
+interface IInscripcionDAO {
+    public function crear(Inscripcion $inscripcion);
+    public function obtenerPorId($id);
+    public function obtenerPorUsuario($usuario_id);
+    public function obtenerPorCurso($curso_id);
+    public function actualizar(Inscripcion $inscripcion);
+    public function verificarInscripcion($usuario_id, $curso_id);
+    public function actualizarProgreso($id, $progreso);
+    public function completarCurso($id);
+}
+
+interface ICertificadoDAO {
+    public function crear(Certificado $certificado);
+    public function obtenerPorId($id);
+    public function obtenerPorCodigo($codigo);
+    public function obtenerPorUsuario($usuario_id);
+    public function verificarCertificado($codigo);
+}
+
+// ========================================
+// IMPLEMENTACIÓN DE DAOs
+// ========================================
+
+class CursoDAO implements ICursoDAO {
+    private $db;
+    
+    public function __construct() {
+        $this->db = Database::getInstance()->getConnection();
+    }
+    
+    public function crear(Curso $curso) {
+        $sql = "INSERT INTO cursos (titulo, descripcion, duracion_horas, empresa_id, activo, fecha_creacion) 
+                VALUES (:titulo, :descripcion, :duracion, :empresa_id, :activo, :fecha_creacion)";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':titulo' => $curso->getTitulo(),
+                ':descripcion' => $curso->getDescripcion(),
+                ':duracion' => $curso->getDuracionHoras(),
+                ':empresa_id' => $curso->getEmpresaId(),
+                ':activo' => $curso->isActivo() ? 1 : 0,
+                ':fecha_creacion' => $curso->getFechaCreacion()
+            ]);
+            
+            $curso->setId($this->db->lastInsertId());
+            return $curso;
+        } catch(PDOException $e) {
+            throw new Exception("Error al crear curso: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorId($id) {
+        $sql = "SELECT * FROM cursos WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($row) {
+                return $this->mapearCurso($row);
+            }
+            return null;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener curso: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerTodos() {
+        $sql = "SELECT * FROM cursos ORDER BY fecha_creacion DESC";
+        
+        try {
+            $stmt = $this->db->query($sql);
+            $cursos = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cursos[] = $this->mapearCurso($row);
+            }
+            
+            return $cursos;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener cursos: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorEmpresa($empresa_id) {
+        $sql = "SELECT * FROM cursos WHERE empresa_id = :empresa_id ORDER BY fecha_creacion DESC";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':empresa_id' => $empresa_id]);
+            $cursos = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cursos[] = $this->mapearCurso($row);
+            }
+            
+            return $cursos;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener cursos de empresa: " . $e->getMessage());
+        }
+    }
+    
+    public function actualizar(Curso $curso) {
+        $sql = "UPDATE cursos SET titulo = :titulo, descripcion = :descripcion, 
+                duracion_horas = :duracion, activo = :activo, fecha_actualizacion = NOW() 
+                WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([
+                ':titulo' => $curso->getTitulo(),
+                ':descripcion' => $curso->getDescripcion(),
+                ':duracion' => $curso->getDuracionHoras(),
+                ':activo' => $curso->isActivo() ? 1 : 0,
+                ':id' => $curso->getId()
+            ]);
+        } catch(PDOException $e) {
+            throw new Exception("Error al actualizar curso: " . $e->getMessage());
+        }
+    }
+    
+    public function eliminar($id) {
+        $sql = "UPDATE cursos SET activo = 0 WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([':id' => $id]);
+        } catch(PDOException $e) {
+            throw new Exception("Error al eliminar curso: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerActivos() {
+        $sql = "SELECT * FROM cursos WHERE activo = 1 ORDER BY fecha_creacion DESC";
+        
+        try {
+            $stmt = $this->db->query($sql);
+            $cursos = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cursos[] = $this->mapearCurso($row);
+            }
+            
+            return $cursos;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener cursos activos: " . $e->getMessage());
+        }
+    }
+    
+    private function mapearCurso($row) {
+        $curso = new Curso();
+        $curso->setId($row['id']);
+        $curso->setTitulo($row['titulo']);
+        $curso->setDescripcion($row['descripcion']);
+        $curso->setDuracionHoras($row['duracion_horas']);
+        $curso->setEmpresaId($row['empresa_id']);
+        $curso->setActivo($row['activo']);
+        $curso->setFechaCreacion($row['fecha_creacion']);
+        $curso->setFechaActualizacion($row['fecha_actualizacion'] ?? null);
+        return $curso;
+    }
+}
+
+class InscripcionDAO implements IInscripcionDAO {
+    private $db;
+    
+    public function __construct() {
+        $this->db = Database::getInstance()->getConnection();
+    }
+    
+    public function crear(Inscripcion $inscripcion) {
+        $sql = "INSERT INTO inscripciones (curso_id, usuario_id, fecha_inscripcion, progreso, estado) 
+                VALUES (:curso_id, :usuario_id, :fecha_inscripcion, :progreso, :estado)";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':curso_id' => $inscripcion->getCursoId(),
+                ':usuario_id' => $inscripcion->getUsuarioId(),
+                ':fecha_inscripcion' => $inscripcion->getFechaInscripcion(),
+                ':progreso' => $inscripcion->getProgreso(),
+                ':estado' => $inscripcion->getEstado()
+            ]);
+            
+            $inscripcion->setId($this->db->lastInsertId());
+            return $inscripcion;
+        } catch(PDOException $e) {
+            throw new Exception("Error al crear inscripción: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorId($id) {
+        $sql = "SELECT * FROM inscripciones WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($row) {
+                return $this->mapearInscripcion($row);
+            }
+            return null;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener inscripción: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorUsuario($usuario_id) {
+        $sql = "SELECT i.*, c.titulo as curso_titulo, c.descripcion as curso_descripcion 
+                FROM inscripciones i 
+                INNER JOIN cursos c ON i.curso_id = c.id 
+                WHERE i.usuario_id = :usuario_id 
+                ORDER BY i.fecha_inscripcion DESC";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':usuario_id' => $usuario_id]);
+            $inscripciones = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $inscripciones[] = $this->mapearInscripcion($row);
+            }
+            
+            return $inscripciones;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener inscripciones: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorCurso($curso_id) {
+        $sql = "SELECT * FROM inscripciones WHERE curso_id = :curso_id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':curso_id' => $curso_id]);
+            $inscripciones = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $inscripciones[] = $this->mapearInscripcion($row);
+            }
+            
+            return $inscripciones;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener inscripciones del curso: " . $e->getMessage());
+        }
+    }
+    
+    public function actualizar(Inscripcion $inscripcion) {
+        $sql = "UPDATE inscripciones SET progreso = :progreso, estado = :estado, 
+                fecha_inicio = :fecha_inicio, fecha_completado = :fecha_completado 
+                WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([
+                ':progreso' => $inscripcion->getProgreso(),
+                ':estado' => $inscripcion->getEstado(),
+                ':fecha_inicio' => $inscripcion->getFechaInicio(),
+                ':fecha_completado' => $inscripcion->getFechaCompletado(),
+                ':id' => $inscripcion->getId()
+            ]);
+        } catch(PDOException $e) {
+            throw new Exception("Error al actualizar inscripción: " . $e->getMessage());
+        }
+    }
+    
+    public function verificarInscripcion($usuario_id, $curso_id) {
+        $sql = "SELECT * FROM inscripciones WHERE usuario_id = :usuario_id AND curso_id = :curso_id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':usuario_id' => $usuario_id,
+                ':curso_id' => $curso_id
+            ]);
+            
+            return $stmt->fetch(PDO::FETCH_ASSOC) ? true : false;
+        } catch(PDOException $e) {
+            throw new Exception("Error al verificar inscripción: " . $e->getMessage());
+        }
+    }
+    
+    public function actualizarProgreso($id, $progreso) {
+        $sql = "UPDATE inscripciones SET progreso = :progreso, estado = 'en_progreso' WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([
+                ':progreso' => $progreso,
+                ':id' => $id
+            ]);
+        } catch(PDOException $e) {
+            throw new Exception("Error al actualizar progreso: " . $e->getMessage());
+        }
+    }
+    
+    public function completarCurso($id) {
+        $sql = "UPDATE inscripciones SET progreso = 100, estado = 'completado', 
+                fecha_completado = NOW() WHERE id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([':id' => $id]);
+        } catch(PDOException $e) {
+            throw new Exception("Error al completar curso: " . $e->getMessage());
+        }
+    }
+    
+    private function mapearInscripcion($row) {
+        $inscripcion = new Inscripcion();
+        $inscripcion->setId($row['id']);
+        $inscripcion->setCursoId($row['curso_id']);
+        $inscripcion->setUsuarioId($row['usuario_id']);
+        $inscripcion->setFechaInscripcion($row['fecha_inscripcion']);
+        $inscripcion->setFechaInicio($row['fecha_inicio'] ?? null);
+        $inscripcion->setFechaCompletado($row['fecha_completado'] ?? null);
+        $inscripcion->setProgreso($row['progreso']);
+        $inscripcion->setEstado($row['estado']);
+        return $inscripcion;
+    }
+}
+
+class CertificadoDAO implements ICertificadoDAO {
+    private $db;
+    
+    public function __construct() {
+        $this->db = Database::getInstance()->getConnection();
+    }
+    
+    public function crear(Certificado $certificado) {
+        $sql = "INSERT INTO certificados (codigo_unico, inscripcion_id, usuario_id, curso_id, fecha_emision, url_validacion) 
+                VALUES (:codigo, :inscripcion_id, :usuario_id, :curso_id, :fecha_emision, :url_validacion)";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':codigo' => $certificado->getCodigoUnico(),
+                ':inscripcion_id' => $certificado->getInscripcionId(),
+                ':usuario_id' => $certificado->getUsuarioId(),
+                ':curso_id' => $certificado->getCursoId(),
+                ':fecha_emision' => $certificado->getFechaEmision(),
+                ':url_validacion' => $certificado->getUrlValidacion()
+            ]);
+            
+            $certificado->setId($this->db->lastInsertId());
+            return $certificado;
+        } catch(PDOException $e) {
+            throw new Exception("Error al crear certificado: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorId($id) {
+        $sql = "SELECT c.*, cu.titulo as curso_titulo, u.nombre as usuario_nombre 
+                FROM certificados c 
+                INNER JOIN cursos cu ON c.curso_id = cu.id 
+                INNER JOIN usuarios u ON c.usuario_id = u.id 
+                WHERE c.id = :id";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($row) {
+                return $this->mapearCertificado($row);
+            }
+            return null;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener certificado: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorCodigo($codigo) {
+        $sql = "SELECT c.*, cu.titulo as curso_titulo, u.nombre as usuario_nombre 
+                FROM certificados c 
+                INNER JOIN cursos cu ON c.curso_id = cu.id 
+                INNER JOIN usuarios u ON c.usuario_id = u.id 
+                WHERE c.codigo_unico = :codigo";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':codigo' => $codigo]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($row) {
+                return $this->mapearCertificado($row);
+            }
+            return null;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener certificado por código: " . $e->getMessage());
+        }
+    }
+    
+    public function obtenerPorUsuario($usuario_id) {
+        $sql = "SELECT c.*, cu.titulo as curso_titulo 
+                FROM certificados c 
+                INNER JOIN cursos cu ON c.curso_id = cu.id 
+                WHERE c.usuario_id = :usuario_id 
+                ORDER BY c.fecha_emision DESC";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':usuario_id' => $usuario_id]);
+            $certificados = [];
+            
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $certificados[] = $this->mapearCertificado($row);
+            }
+            
+            return $certificados;
+        } catch(PDOException $e) {
+            throw new Exception("Error al obtener certificados del usuario: " . $e->getMessage());
+        }
+    }
+    
+    public function verificarCertificado($codigo) {
+        $sql = "SELECT c.*, cu.titulo as curso_titulo, u.nombre as usuario_nombre, 
+                cu.duracion_horas, e.nombre as empresa_nombre 
+                FROM certificados c 
+                INNER JOIN cursos cu ON c.curso_id = cu.id 
+                INNER JOIN usuarios u ON c.usuario_id = u.id 
+                INNER JOIN empresas e ON cu.empresa_id = e.id 
+                WHERE c.codigo_unico = :codigo";
+        
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':codigo' => $codigo]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch(PDOException $e) {
+            throw new Exception("Error al verificar certificado: " . $e->getMessage());
+        }
+    }
+    
+    private function mapearCertificado($row) {
+        $certificado = new Certificado();
+        $certificado->setId($row['id']);
+        $certificado->setCodigoUnico($row['codigo_unico']);
+        $certificado->setInscripcionId($row['inscripcion_id']);
+        $certificado->setUsuarioId($row['usuario_id']);
+        $certificado->setCursoId($row['curso_id']);
+        $certificado->setFechaEmision($row['fecha_emision']);
+        $certificado->setUrlValidacion($row['url_validacion'] ?? null);
+        return $certificado;
+    }
+}
+
+// ========================================
+// SERVICIO DE CURSOS (LÓGICA DE NEGOCIO)
+// ========================================
+
+class CursoService {
+    private $cursoDAO;
+    private $inscripcionDAO;
+    private $certificadoDAO;
+    
+    public function __construct() {
+        $this->cursoDAO = new CursoDAO();
+        $this->inscripcionDAO = new InscripcionDAO();
+        $this->certificadoDAO = new CertificadoDAO();
+    }
+    
+    public function crearCurso($titulo, $descripcion, $duracion_horas, $empresa_id) {
+        $curso = new Curso();
+        $curso->setTitulo($titulo);
+        $curso->setDescripcion($descripcion);
+        $curso->setDuracionHoras($duracion_horas);
+        $curso->setEmpresaId($empresa_id);
+        
+        return $this->cursoDAO->crear($curso);
+    }
+    
+    public function inscribirUsuario($usuario_id, $curso_id) {
+        // Verificar si ya está inscrito
+        if ($this->inscripcionDAO->verificarInscripcion($usuario_id, $curso_id)) {
+            throw new Exception("El usuario ya está inscrito en este curso");
+        }
+        
+        $inscripcion = new Inscripcion();
+        $inscripcion->setUsuarioId($usuario_id);
+        $inscripcion->setCursoId($curso_id);
+        
+        return $this->inscripcionDAO->crear($inscripcion);
+    }
+    
+    public function completarCurso($inscripcion_id, $usuario_id, $curso_id) {
+        // Completar la inscripción
+        $this->inscripcionDAO->completarCurso($inscripcion_id);
+        
+        // Generar certificado
+        $certificado = new Certificado();
+        $certificado->setInscripcionId($inscripcion_id);
+        $certificado->setUsuarioId($usuario_id);
+        $certificado->setCursoId($curso_id);
+        $certificado->setUrlValidacion("/verificar-certificado.php?codigo=" . $certificado->getCodigoUnico());
+        
+        return $this->certificadoDAO->crear($certificado);
+    }
+    
+    public function obtenerCursosDisponibles() {
+        return $this->cursoDAO->obtenerActivos();
+    }
+    
+    public function obtenerMisCursos($usuario_id) {
+        return $this->inscripcionDAO->obtenerPorUsuario($usuario_id);
+    }
+    
+    public function obtenerMisCertificados($usuario_id) {
+        return $this->certificadoDAO->obtenerPorUsuario($usuario_id);
+    }
+    
+    public function actualizarProgresoCurso($inscripcion_id, $progreso) {
+        if ($progreso < 0 || $progreso > 100) {
+            throw new Exception("El progreso debe estar entre 0 y 100");
+        }
+        
+        if ($progreso == 100) {
+            // Si el progreso es 100%, completar el curso
+            $inscripcion = $this->inscripcionDAO->obtenerPorId($inscripcion_id);
+            if ($inscripcion) {
+                return $this->completarCurso(
+                    $inscripcion_id, 
+                    $inscripcion->getUsuarioId(), 
+                    $inscripcion->getCursoId()
+                );
+            }
+        } else {
+            return $this->inscripcionDAO->actualizarProgreso($inscripcion_id, $progreso);
+        }
+    }
+}
+
+// ========================================
+// SQL PARA CREAR LAS TABLAS
+// ========================================
+
+/*
+CREATE TABLE cursos (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT,
+    duracion_horas INT NOT NULL,
+    empresa_id INT NOT NULL,
+    activo BOOLEAN DEFAULT TRUE,
+    fecha_creacion DATETIME NOT NULL,
+    fecha_actualizacion DATETIME,
+    FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+);
+
+CREATE TABLE inscripciones (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    curso_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    fecha_inscripcion DATETIME NOT NULL,
+    fecha_inicio DATETIME,
+    fecha_completado DATETIME,
+    progreso INT DEFAULT 0,
+    estado ENUM('inscrito', 'en_progreso', 'completado', 'abandonado') DEFAULT 'inscrito',
+    FOREIGN KEY (curso_id) REFERENCES cursos(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    UNIQUE KEY unique_inscripcion (usuario_id, curso_id)
+);
+
+CREATE TABLE certificados (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    codigo_unico VARCHAR(20) UNIQUE NOT NULL,
+    inscripcion_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    curso_id INT NOT NULL,
+    fecha_emision DATETIME NOT NULL,
+    url_validacion VARCHAR(255),
+    FOREIGN KEY (inscripcion_id) REFERENCES inscripciones(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (curso_id) REFERENCES cursos(id)
+);
+
+-- Índices adicionales para mejorar el rendimiento
+CREATE INDEX idx_cursos_empresa ON cursos(empresa_id);
+CREATE INDEX idx_inscripciones_usuario ON inscripciones(usuario_id);
+CREATE INDEX idx_inscripciones_curso ON inscripciones(curso_id);
+CREATE INDEX idx_certificados_usuario ON certificados(usuario_id);
+CREATE INDEX idx_certificados_codigo ON certificados(codigo_unico);
+*/
+
+// ========================================
+// EJEMPLO DE USO
+// ========================================
+
+/*
+// Crear una instancia del servicio
+$cursoService = new CursoService();
+
+// 1. Empresa crea un curso
+try {
+    $curso = $cursoService->crearCurso(
+        "Introducción a PHP",
+        "Aprende los fundamentos de PHP y desarrollo web",
+        40, // duración en horas
+        1   // ID de la empresa
+    );
+    echo "Curso creado con ID: " . $curso->getId();
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+
+// 2. Usuario se inscribe a un curso
+try {
+    $inscripcion = $cursoService->inscribirUsuario(
+        123, // ID del usuario
+        1    // ID del curso
+    );
+    echo "Inscripción exitosa con ID: " . $inscripcion->getId();
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+
+// 3. Actualizar progreso del curso
+try {
+    $cursoService->actualizarProgresoCurso(
+        1,  // ID de la inscripción
+        50  // Progreso en porcentaje
+    );
+    echo "Progreso actualizado";
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+
+// 4. Completar el curso (genera certificado automáticamente)
+try {
+    $certificado = $cursoService->actualizarProgresoCurso(
+        1,   // ID de la inscripción
+        100  // 100% completado
+    );
+    echo "Curso completado! Certificado: " . $certificado->getCodigoUnico();
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+
+// 5. Ver cursos disponibles
+$cursosDisponibles = $cursoService->obtenerCursosDisponibles();
+foreach ($cursosDisponibles as $curso) {
+    echo $curso->getTitulo() . " - " . $curso->getDuracionHoras() . " horas\n";
+}
+
+// 6. Ver mis cursos (como usuario)
+$misCursos = $cursoService->obtenerMisCursos(123);
+foreach ($misCursos as $inscripcion) {
+    echo "Curso: " . $inscripcion->getCursoId() . 
+         " - Progreso: " . $inscripcion->getProgreso() . 
+         "% - Estado: " . $inscripcion->getEstado() . "\n";
+}
+
+// 7. Ver mis certificados
+$misCertificados = $cursoService->obtenerMisCertificados(123);
+foreach ($misCertificados as $certificado) {
+    echo "Certificado: " . $certificado->getCodigoUnico() . 
+         " - Curso ID: " . $certificado->getCursoId() . 
+         " - Fecha: " . $certificado->getFechaEmision() . "\n";
+}
+
+// 8. Verificar un certificado por código
+$certificadoDAO = new CertificadoDAO();
+$datosVerificacion = $certificadoDAO->verificarCertificado("ABC123DEF456");
+if ($datosVerificacion) {
+    echo "Certificado válido para: " . $datosVerificacion['usuario_nombre'] . 
+         " - Curso: " . $datosVerificacion['curso_titulo'];
+}
+*/
+
+?>
+/app
+  /dao
+    - CursoDAO.php
+    - InscripcionDAO.php
+    - CertificadoDAO.php
+  /entities
+    - Curso.php
+    - Inscripcion.php
+    - Certificado.php
+  /services
+    - CursoService.php
+  /config
+    - Database.php
+
+    ------------------------------------------------
+    <?php
+// ========================================
+// config.php - Configuración y autoload básico
+// ========================================
+session_start();
+
+// Incluir todas las clases necesarias
+require_once 'dao/Database.php';
+require_once 'entities/Curso.php';
+require_once 'entities/Inscripcion.php';
+require_once 'entities/Certificado.php';
+require_once 'dao/CursoDAO.php';
+require_once 'dao/InscripcionDAO.php';
+require_once 'dao/CertificadoDAO.php';
+require_once 'services/CursoService.php';
+
+// Función helper para verificar si el usuario está logueado
+function estaLogueado() {
+    return isset($_SESSION['usuario_id']);
+}
+
+// Función helper para verificar si es una empresa
+function esEmpresa() {
+    return isset($_SESSION['tipo_usuario']) && $_SESSION['tipo_usuario'] === 'empresa';
+}
+
+// ========================================
+// header.php - Encabezado común
+// ========================================
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Cursos - App Empleo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f4f4;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        nav {
+            background: #333;
+            color: white;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 20px;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        nav a:hover {
+            text-decoration: underline;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 20px;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            background: #28a745;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+        
+        .curso-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .badge-inscrito {
+            background: #ffc107;
+            color: #000;
+        }
+        
+        .badge-progreso {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .badge-completado {
+            background: #28a745;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <ul>
+                <li><a href="index.php">Inicio</a></li>
+                <li><a href="cursos.php">Ver Cursos</a></li>
+                <?php if (estaLogueado()): ?>
+                    <li><a href="mis-cursos.php">Mis Cursos</a></li>
+                    <li><a href="certificados.php">Mis Certificados</a></li>
+                    <?php if (esEmpresa()): ?>
+                        <li><a href="crear-curso.php">Crear Curso</a></li>
+                        <li><a href="gestionar-cursos.php">Gestionar Cursos</a></li>
+                    <?php endif; ?>
+                    <li><a href="logout.php">Cerrar Sesión</a></li>
+                <?php else: ?>
+                    <li><a href="login.php">Iniciar Sesión</a></li>
+                <?php endif; ?>
+            </ul>
+        </div>
+    </nav>
+
+<?php
+// ========================================
+// cursos.php - Lista de cursos disponibles
+// ========================================
+// require_once 'config.php';
+// include 'header.php';
+
+$cursoService = new CursoService();
+$cursos = $cursoService->obtenerCursosDisponibles();
+?>
+
+<div class="container">
+    <h1>Cursos Disponibles</h1>
+    
+    <?php if (isset($_GET['mensaje'])): ?>
+        <div class="alert alert-success">
+            <?php echo htmlspecialchars($_GET['mensaje']); ?>
+        </div>
+    <?php endif; ?>
+    
+    <div class="curso-grid">
+        <?php foreach ($cursos as $curso): ?>
+            <div class="card">
+                <h3><?php echo htmlspecialchars($curso->getTitulo()); ?></h3>
+                <p><?php echo htmlspecialchars($curso->getDescripcion()); ?></p>
+                <p><strong>Duración:</strong> <?php echo $curso->getDuracionHoras(); ?> horas</p>
+                
+                <?php if (estaLogueado()): ?>
+                    <form action="inscribir-curso.php" method="POST" style="margin-top: 15px;">
+                        <input type="hidden" name="curso_id" value="<?php echo $curso->getId(); ?>">
+                        <button type="submit" class="btn btn-success">Inscribirse</button>
+                    </form>
+                <?php else: ?>
+                    <p style="margin-top: 15px;">
+                        <a href="login.php" class="btn">Inicia sesión para inscribirte</a>
+                    </p>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    
+    <?php if (empty($cursos)): ?>
+        <div class="card">
+            <p>No hay cursos disponibles en este momento.</p>
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php
+// ========================================
+// mis-cursos.php - Cursos del usuario
+// ========================================
+// require_once 'config.php';
+// include 'header.php';
+
+if (!estaLogueado()) {
+    header('Location: login.php');
+    exit;
+}
+
+$cursoService = new CursoService();
+$cursoDAO = new CursoDAO();
+$misCursos = $cursoService->obtenerMisCursos($_SESSION['usuario_id']);
+?>
+
+<div class="container">
+    <h1>Mis Cursos</h1>
+    
+    <?php foreach ($misCursos as $inscripcion): 
+        $curso = $cursoDAO->obtenerPorId($inscripcion->getCursoId());
+    ?>
+        <div class="card">
+            <h3><?php echo htmlspecialchars($curso->getTitulo()); ?></h3>
+            <p><?php echo htmlspecialchars($curso->getDescripcion()); ?></p>
+            
+            <div class="badge badge-<?php 
+                echo $inscripcion->getEstado() === 'completado' ? 'completado' : 
+                    ($inscripcion->getEstado() === 'en_progreso' ? 'progreso' : 'inscrito'); 
+            ?>">
+                <?php echo ucfirst($inscripcion->getEstado()); ?>
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: <?php echo $inscripcion->getProgreso(); ?>%">
+                    <?php echo $inscripcion->getProgreso(); ?>%
+                </div>
+            </div>
+            
+            <?php if ($inscripcion->getEstado() !== 'completado'): ?>
+                <form action="actualizar-progreso.php" method="POST" style="margin-top: 15px;">
+                    <input type="hidden" name="inscripcion_id" value="<?php echo $inscripcion->getId(); ?>">
+                    <div class="form-group">
+                        <label>Actualizar Progreso:</label>
+                        <input type="number" name="progreso" min="0" max="100" 
+                               value="<?php echo $inscripcion->getProgreso(); ?>" required>
+                    </div>
+                    <button type="submit" class="btn">Actualizar</button>
+                </form>
+            <?php else: ?>
+                <p style="margin-top: 15px;">
+                    <strong>¡Felicitaciones! Has completado este curso.</strong><br>
+                    <a href="certificados.php" class="btn btn-success">Ver Certificado</a>
+                </p>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
+    
+    <?php if (empty($misCursos)): ?>
+        <div class="card">
+            <p>No estás inscrito en ningún curso.</p>
+            <p><a href="cursos.php" class="btn">Ver cursos disponibles</a></p>
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php
+// ========================================
+// certificados.php - Certificados del usuario
+// ========================================
+// require_once 'config.php';
+// include 'header.php';
+
+if (!estaLogueado()) {
+    header('Location: login.php');
+    exit;
+}
+
+$cursoService = new CursoService();
+$cursoDAO = new CursoDAO();
+$certificados = $cursoService->obtenerMisCertificados($_SESSION['usuario_id']);
+?>
+
+<div class="container">
+    <h1>Mis Certificados</h1>
+    
+    <div class="curso-grid">
+        <?php foreach ($certificados as $certificado): 
+            $curso = $cursoDAO->obtenerPorId($certificado->getCursoId());
+        ?>
+            <div class="card">
+                <h3>Certificado de Completación</h3>
+                <p><strong>Curso:</strong> <?php echo htmlspecialchars($curso->getTitulo()); ?></p>
+                <p><strong>Código:</strong> <?php echo $certificado->getCodigoUnico(); ?></p>
+                <p><strong>Fecha de emisión:</strong> <?php echo date('d/m/Y', strtotime($certificado->getFechaEmision())); ?></p>
+                
+                <div style="margin-top: 15px;">
+                    <a href="ver-certificado.php?id=<?php echo $certificado->getId(); ?>" 
+                       class="btn btn-success" target="_blank">Ver Certificado</a>
+                    <a href="verificar-certificado.php?codigo=<?php echo $certificado->getCodigoUnico(); ?>" 
+                       class="btn" target="_blank">Verificar</a>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    
+    <?php if (empty($certificados)): ?>
+        <div class="card">
+            <p>No tienes certificados aún. Completa un curso para obtener tu primer certificado.</p>
+            <p><a href="mis-cursos.php" class="btn">Ver mis cursos</a></p>
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php
+// ========================================
+// crear-curso.php - Formulario para empresas
+// ========================================
+// require_once 'config.php';
+// include 'header.php';
+
+if (!estaLogueado() || !esEmpresa()) {
+    header('Location: login.php');
+    exit;
+}
+?>
+
+<div class="container">
+    <h1>Crear Nuevo Curso</h1>
+    
+    <div class="card">
+        <form action="guardar-curso.php" method="POST">
+            <div class="form-group">
+                <label for="titulo">Título del Curso:</label>
+                <input type="text" id="titulo" name="titulo" required maxlength="200">
+            </div>
+            
+            <div class="form-group">
+                <label for="descripcion">Descripción:</label>
+                <textarea id="descripcion" name="descripcion" rows="5" required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="duracion">Duración (horas):</label>
+                <input type="number" id="duracion" name="duracion_horas" min="1" required>
+            </div>
+            
+            <button type="submit" class="btn btn-success">Crear Curso</button>
+            <a href="gestionar-cursos.php" class="btn">Cancelar</a>
+        </form>
+    </div>
+</div>
+
+<?php
+// ========================================
+// gestionar-cursos.php - Panel para empresas
+// ========================================
+// require_once 'config.php';
+// include 'header.php';
+
+if (!estaLogueado() || !esEmpresa()) {
+    header('Location: login.php');
+    exit;
+}
+
+$cursoDAO = new CursoDAO();
+$inscripcionDAO = new InscripcionDAO();
+$cursos = $cursoDAO->obtenerPorEmpresa($_SESSION['empresa_id']);
+?>
+
+<div class="container">
+    <h1>Gestionar Mis Cursos</h1>
+    
+    <p style="margin-bottom: 20px;">
+        <a href="crear-curso.php" class="btn btn-success">Crear Nuevo Curso</a>
+    </p>
+    
+    <?php foreach ($cursos as $curso): 
+        $inscripciones = $inscripcionDAO->obtenerPorCurso($curso->getId());
+        $totalInscritos = count($inscripciones);
+        $completados = count(array_filter($inscripciones, function($i) { 
+            return $i->getEstado() === 'completado'; 
+        }));
+    ?>
+        <div class="card">
+            <h3><?php echo htmlspecialchars($curso->getTitulo()); ?></h3>
+            <p><?php echo htmlspecialchars($curso->getDescripcion()); ?></p>
+            <p><strong>Duración:</strong> <?php echo $curso->getDuracionHoras(); ?> horas</p>
+            <p><strong>Estado:</strong> <?php echo $curso->isActivo() ? 'Activo' : 'Inactivo'; ?></p>
+            <p><strong>Inscritos:</strong> <?php echo $totalInscritos; ?> usuarios</p>
+            <p><strong>Completados:</strong> <?php echo $completados; ?> usuarios</p>
+            
+            <div style="margin-top: 15px;">
+                <a href="editar-curso.php?id=<?php echo $curso->getId(); ?>" class="btn">Editar</a>
+                <?php if ($curso->isActivo()): ?>
+                    <a href="desactivar-curso.php?id=<?php echo $curso->getId(); ?>" 
+                       class="btn btn-danger" 
+                       onclick="return confirm('¿Estás seguro de desactivar este curso?')">Desactivar</a>
+                <?php else: ?>
+                    <a href="activar-curso.php?id=<?php echo $curso->getId(); ?>" 
+                       class="btn btn-success">Activar</a>
+                <?php endif; ?>
+                <a href="ver-inscritos.php?curso_id=<?php echo $curso->getId(); ?>" class="btn">Ver Inscritos</a>
+            </div>
+        </div>
+    <?php endforeach; ?>
+    
+    <?php if (empty($cursos)): ?>
+        <div class="card">
+            <p>No has creado ningún curso aún.</p>
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php
+// ========================================
+// ver-certificado.php - Vista del certificado
+// ========================================
+// require_once 'config.php';
+
+if (!isset($_GET['id'])) {
+    header('Location: certificados.php');
+    exit;
+}
+
+$certificadoDAO = new CertificadoDAO();
+$cursoDAO = new CursoDAO();
+$certificado = $certificadoDAO->obtenerPorId($_GET['id']);
+
+if (!$certificado) {
+    die("Certificado no encontrado");
+}
+
+$curso = $cursoDAO->obtenerPorId($certificado->getCursoId());
+
+// Para simplificar, asumimos que tenemos el nombre del usuario en la sesión
+// En producción, deberías obtenerlo de la base de datos
+$nombreUsuario = $_SESSION['usuario_nombre'] ?? 'Usuario';
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificado - <?php echo htmlspecialchars($curso->getTitulo()); ?></title>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .certificado {
+            background: white;
+            padding: 60px;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 2px solid #gold;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+            text-align: center;
+            position: relative;
+        }
+        
+        .certificado::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            border: 3px solid #f4e19c;
+            pointer-events: none;
+        }
+        
+        .titulo-certificado {
+            font-size: 48px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        
+        .subtitulo {
+            font-size: 24px;
+            color: #7f8c8d;
+            margin-bottom: 40px;
+        }
+        
+        .nombre-usuario {
+            font-size: 36px;
+            color: #2c3e50;
+            margin: 30px 0;
+            font-weight: bold;
+            border-bottom: 2px solid #3498db;
+            display: inline-block;
+            padding-bottom: 10px;
+        }
+        
+        .curso-nombre {
+            font-size: 28px;
+            color: #34495e;
+            margin: 20px 0;
+            font-style: italic;
+        }
+        
+        .fecha {
+            font-size: 18px;
+            color: #7f8c8d;
+            margin-top: 40px;
+        }
+        
+        .codigo {
+            font-size: 14px;
+            color: #95a5a6;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+        }
+        
+        .firma {
+            margin-top: 50px;
+            border-top: 2px solid #2c3e50;
+            width: 200px;
+            margin-left: auto;
+            margin-right: auto;
+            padding-top: 10px;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .certificado {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="certificado">
+        <div class="titulo-certificado">CERTIFICADO</div>
+        <div class="subtitulo">de Completación</div>
+        
+        <p style="font-size: 20px;">Se certifica que</p>
+        
+        <div class="nombre-usuario"><?php echo htmlspecialchars($nombreUsuario); ?></div>
+        
+        <p style="font-size: 20px;">ha completado satisfactoriamente el curso</p>
+        
+        <div class="curso-nombre">"<?php echo htmlspecialchars($curso->getTitulo()); ?>"</div>
+        
+        <p style="font-size: 18px;">con una duración de <?php echo $curso->getDuracionHoras(); ?> horas</p>
+        
+        <div class="fecha">
+            Emitido el <?php echo date('d \d\e F \d\e Y', strtotime($certificado->getFechaEmision())); ?>
+        </div>
+        
+        <div class="firma">
+            <p style="margin: 5px 0;">Director de Capacitación</p>
+        </div>
+        
+        <div class="codigo">
+            Código de verificación: <?php echo $certificado->getCodigoUnico(); ?>
+        </div>
+    </div>
+</body>
+</html>
+
+<?php
+// ========================================
+// Procesadores de formularios (Actions)
+// ========================================
+
+// inscribir-curso.php
+/*
+require_once 'config.php';
+
+if (!estaLogueado() || !isset($_POST['curso_id'])) {
+    header('Location: cursos.php');
+    exit;
+}
+
+try {
+    $cursoService = new CursoService();
+    $cursoService->inscribirUsuario($_SESSION['usuario_id'], $_POST['curso_id']);
+    header('Location: mis-cursos.php?mensaje=Inscripción exitosa');
+} catch (Exception $e) {
+    header('Location: cursos.php?error=' . urlencode($e->getMessage()));
+}
+*/
+
+// actualizar-progreso.php
+/*
+require_once 'config.php';
+
+if (!estaLogueado() || !isset($_POST['inscripcion_id']) || !isset($_POST['progreso'])) {
+    header('Location: mis-cursos.php');
+    exit;
+}
+
+try {
+    $cursoService = new CursoService();
+    $cursoService->actualizarProgresoCurso($_POST['inscripcion_id'], $_POST['progreso']);
+    
+    if ($_POST['progreso'] == 100) {
+        header('Location: certificados.php?mensaje=¡Felicitaciones! Has completado el curso');
+    } else {
+        header('Location: mis-cursos.php?mensaje=Progreso actualizado');
+    }
+} catch (Exception $e) {
+    header('Location: mis-cursos.php?error=' . urlencode($e->getMessage()));
+}
+*/
+
+// guardar-curso.php
+/*
+require_once 'config.php';
+
+if (!estaLogueado() || !esEmpresa()) {
+    header('Location: login.php');
+    exit;
+}
+
+try {
+    $cursoService = new CursoService();
+    $curso = $cursoService->crearCurso(
+        $_POST['titulo'],
+        $_POST['descripcion'],
+        $_POST['duracion_horas'],
+        $_SESSION['empresa_id']
+    );
+    header('Location: gestionar-cursos.php?mensaje=Curso creado exitosamente');
+} catch (Exception $e) {
+    header('Location: crear-curso.php?error=' . urlencode($e->getMessage()));
+}
+*/
+
+?>
+
+/tu-app/
+  /dao/
+  /entities/
+  /services/
+  /vistas/
+    - cursos.php
+    - mis-cursos.php
+    - certificados.php
+    - crear-curso.php
+    - etc...

@@ -1,0 +1,647 @@
+CREATE DATABASE IF NOT EXISTS inclusion_laboral
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE inclusion_laboral;
+
+-- =========================================================
+-- Tablas maestras
+-- =========================================================
+CREATE TABLE tipo_discapacidad (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  discapacidad VARCHAR(100) NOT NULL,
+  descripcion TEXT
+) ENGINE=InnoDB;
+
+CREATE TABLE provincia (
+  id_provincia INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE localidad (
+  id_localidad INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  id_provincia INT NOT NULL,
+  CONSTRAINT fk_localidad_provincia
+    FOREIGN KEY (id_provincia) REFERENCES provincia(id_provincia)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Usuarios base
+-- =========================================================
+CREATE TABLE usuario (
+  id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100),
+  apellido VARCHAR(100),
+  email VARCHAR(150) UNIQUE,
+  clave VARCHAR(255),
+  tipo_dni VARCHAR(10),
+  dni VARCHAR(20),
+  telefono VARCHAR(20),
+  tipo ENUM('Persona', 'Empresa', 'Administrador') NOT NULL
+) ENGINE=InnoDB;
+
+-- Persona depende fuertemente de usuario → CASCADE
+CREATE TABLE persona (
+  id_persona INT PRIMARY KEY,
+  id_tipodiscapacidad INT NULL,
+  cv LONGBLOB,
+  certificaciones TEXT,
+  CONSTRAINT fk_persona_usuario
+    FOREIGN KEY (id_persona) REFERENCES usuario(id_usuario)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_persona_tipodiscapacidad
+    FOREIGN KEY (id_tipodiscapacidad) REFERENCES tipo_discapacidad(id)
+    ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- Empresa depende fuertemente de usuario → CASCADE
+CREATE TABLE empresa (
+  id_empresa INT PRIMARY KEY,
+  nombre_empresa VARCHAR(150),
+  razon_social VARCHAR(150),
+  condicion_social VARCHAR(100),
+  documento VARCHAR(50),
+  calle VARCHAR(100),
+  numero VARCHAR(20),
+  codigo_postal VARCHAR(20),
+  telefono VARCHAR(50),
+  pais VARCHAR(100),
+  industria VARCHAR(100),
+  cantidad_empleados INT,
+  politica_inclusion TEXT,
+  datos_contacto TEXT,
+  CONSTRAINT fk_empresa_usuario
+    FOREIGN KEY (id_empresa) REFERENCES usuario(id_usuario)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Empleo
+-- =========================================================
+CREATE TABLE ofertas_laborales (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  id_empresa INT NOT NULL,
+  titulo VARCHAR(150),
+  descripcion TEXT,
+  tipo_modalidad VARCHAR(50),
+  tipo_trabajo VARCHAR(50),
+  carga_horaria INT,
+  salario_estimado DECIMAL(10,2),
+  id_tipocapacidad INT NULL,
+  id_provincia INT NULL,
+  id_localidad INT NULL,
+  fecha_publicacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_oferta_empresa
+    FOREIGN KEY (id_empresa) REFERENCES empresa(id_empresa)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  -- Datos maestros: si llegan a eliminar/editar, no queremos borrar ofertas → SET NULL / RESTRICT
+  CONSTRAINT fk_oferta_tipocapacidad
+    FOREIGN KEY (id_tipocapacidad) REFERENCES tipo_discapacidad(id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_oferta_provincia
+    FOREIGN KEY (id_provincia) REFERENCES provincia(id_provincia)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_oferta_localidad
+    FOREIGN KEY (id_localidad) REFERENCES localidad(id_localidad)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX idx_oferta_empresa (id_empresa),
+  INDEX idx_oferta_geo (id_provincia, id_localidad),
+  INDEX idx_oferta_tipo (id_tipocapacidad)
+) ENGINE=InnoDB;
+
+CREATE TABLE postulaciones (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  id_persona INT NOT NULL,
+  id_oferta INT NOT NULL,
+  fecha_postulacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+  estado ENUM('pendiente', 'en revisión', 'aceptado', 'rechazado') NOT NULL,
+  CONSTRAINT fk_post_persona
+    FOREIGN KEY (id_persona) REFERENCES persona(id_persona)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_post_oferta
+    FOREIGN KEY (id_oferta) REFERENCES ofertas_laborales(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY uk_persona_oferta (id_persona, id_oferta)
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Cursos
+-- =========================================================
+CREATE TABLE curso (
+  id_curso INT AUTO_INCREMENT PRIMARY KEY,
+  titulo VARCHAR(200) NOT NULL,
+  descripcion TEXT,
+  duracion_horas INT NOT NULL,
+  id_empresa INT NOT NULL,
+  publicado TINYINT(1) NOT NULL DEFAULT 1,
+  fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion DATETIME NULL,
+  CONSTRAINT fk_curso_empresa
+    FOREIGN KEY (id_empresa) REFERENCES empresa(id_empresa)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX idx_curso_empresa (id_empresa)
+) ENGINE=InnoDB;
+
+CREATE TABLE inscripcion (
+  id_inscripcion INT AUTO_INCREMENT PRIMARY KEY,
+  id_curso INT NOT NULL,
+  id_usuario INT NOT NULL,
+  fecha_inscripcion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fecha_inicio DATETIME NULL,
+  fecha_completado DATETIME NULL,
+  progreso INT DEFAULT 0,
+  estado ENUM('inscrito','en_progreso','completado','abandonado') DEFAULT 'inscrito',
+  CONSTRAINT fk_insc_curso
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_insc_usuario
+    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY uk_usuario_curso (id_usuario, id_curso),
+  INDEX idx_inscripcion_usuario (id_usuario),
+  INDEX idx_inscripcion_curso (id_curso)
+) ENGINE=InnoDB;
+
+CREATE TABLE certificado (
+  id_certificado INT AUTO_INCREMENT PRIMARY KEY,
+  codigo_unico VARCHAR(20) UNIQUE NOT NULL,
+  id_inscripcion INT NOT NULL,
+  id_usuario INT NOT NULL,
+  id_curso INT NOT NULL,
+  fecha_emision DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  url_validacion VARCHAR(255),
+  CONSTRAINT fk_cert_insc
+    FOREIGN KEY (id_inscripcion) REFERENCES inscripcion(id_inscripcion)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_cert_usuario
+    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_cert_curso
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX idx_cert_usuario (id_usuario),
+  INDEX idx_cert_codigo (codigo_unico)
+) ENGINE=InnoDB;
+
+CREATE TABLE curso_leccion (
+  id_leccion INT AUTO_INCREMENT PRIMARY KEY,
+  id_curso INT NOT NULL,
+  titulo VARCHAR(150) NOT NULL,
+  tipo ENUM('pdf','texto') NOT NULL DEFAULT 'pdf',
+  url_pdf VARCHAR(255) NULL,
+  contenido_texto MEDIUMTEXT NULL,
+  orden INT NOT NULL DEFAULT 1,
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_leccion_curso
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX idx_leccion_curso (id_curso),
+  INDEX idx_leccion_curso_orden (id_curso, orden)
+) ENGINE=InnoDB;
+
+CREATE TABLE curso_leccion_vista (
+  id_leccion INT NOT NULL,
+  id_usuario INT NOT NULL,
+  visto_el DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id_leccion, id_usuario),
+  CONSTRAINT fk_leccionvista_leccion
+    FOREIGN KEY (id_leccion) REFERENCES curso_leccion(id_leccion)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_leccionvista_usuario
+    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- (Opcional) Semillas mínimas
+-- =========================================================
+-- Admin por defecto
+INSERT INTO usuario (nombre, apellido, email, clave, tipo_dni, dni, telefono, tipo)
+VALUES ('Admin','Sistema','admin@inclusion.com', SHA2('admin123',256), 'DNI', '00000000', '1234567890', 'Administrador');
+-- Inserts de tipo_discapacidad
+INSERT INTO tipo_discapacidad (discapacidad, descripcion) VALUES
+('Visual', 'Discapacidad relacionada con la pérdida parcial o total de la visión.'),
+('Auditiva', 'Discapacidad relacionada con la pérdida parcial o total de la audición.'),
+('Intelectual', 'Limitaciones significativas en el funcionamiento intelectual y en la conducta adaptativa.'),
+('Psicosocial', 'Condiciones mentales o emocionales que limitan significativamente la vida diaria.'),
+('Motora', 'Dificultades para moverse, ya sea por pérdida de extremidades o movilidad reducida.'),
+('Múltiple', 'Presencia de dos o más tipos de discapacidades en una misma persona.'),
+('Visceral', 'Afecta el funcionamiento de órganos internos, como corazón, riñones o pulmones.'),
+('Del lenguaje y la comunicación', 'Limitaciones para expresarse o entender el lenguaje hablado o escrito.');
+
+-- Insertar las provincias de Argentina
+INSERT INTO provincia (nombre) VALUES 
+('Buenos Aires'), ('Catamarca'), ('Chaco'), ('Chubut'),
+('Córdoba'), ('Corrientes'), ('Entre Ríos'), ('Formosa'),
+('Jujuy'), ('La Pampa'), ('La Rioja'), ('Mendoza'),
+('Misiones'), ('Neuquén'), ('Río Negro'), ('Salta'),
+('San Juan'), ('San Luis'), ('Santa Cruz'), ('Santa Fe'),
+('Santiago del Estero'), ('Tierra del Fuego'), ('Tucumán'), ('Ciudad Autónoma de Buenos Aires');
+
+select * from localidad;
+-- Buenos Aires (id_provincia = 1)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('La Plata', 1),
+('Mar del Plata', 1),
+('Bahía Blanca', 1),
+('Tandil', 1),
+('Quilmes', 1);
+
+-- Catamarca (id_provincia = 2)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Fernando del Valle de Catamarca', 2),
+('Belén', 2),
+('Andalgalá', 2);
+
+-- Chaco (id_provincia = 3)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Resistencia', 3),
+('Presidencia Roque Sáenz Peña', 3),
+('Villa Ángela', 3);
+
+-- Chubut (id_provincia = 4)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Rawson', 4),
+('Comodoro Rivadavia', 4),
+('Puerto Madryn', 4),
+('Trelew', 4);
+
+-- Córdoba (id_provincia = 5)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Córdoba', 5),
+('Villa Carlos Paz', 5),
+('Río Cuarto', 5),
+('Villa María', 5);
+
+-- Corrientes (id_provincia = 6)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Corrientes', 6),
+('Goya', 6),
+('Mercedes', 6),
+('Paso de los Libres', 6);
+
+-- Entre Ríos (id_provincia = 7)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Paraná', 7),
+('Concordia', 7),
+('Gualeguaychú', 7);
+
+-- Formosa (id_provincia = 8)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Formosa', 8),
+('Clorinda', 8),
+('Pirané', 8);
+
+-- Jujuy (id_provincia = 9)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Salvador de Jujuy', 9),
+('Palpalá', 9),
+('Libertador General San Martín', 9);
+
+-- La Pampa (id_provincia = 10)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Santa Rosa', 10),
+('General Pico', 10),
+('Toay', 10);
+
+-- La Rioja (id_provincia = 11)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('La Rioja', 11),
+('Chilecito', 11),
+('Chamical', 11);
+
+-- Mendoza (id_provincia = 12)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Mendoza', 12),
+('San Rafael', 12),
+('Godoy Cruz', 12),
+('Luján de Cuyo', 12);
+
+-- Misiones (id_provincia = 13)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Posadas', 13),
+('Oberá', 13),
+('Eldorado', 13);
+
+-- Neuquén (id_provincia = 14)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Neuquén', 14),
+('San Martín de los Andes', 14),
+('Cutral Có', 14);
+
+-- Río Negro (id_provincia = 15)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Viedma', 15),
+('San Carlos de Bariloche', 15),
+('General Roca', 15);
+
+-- Salta (id_provincia = 16)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Salta', 16),
+('San Ramón de la Nueva Orán', 16),
+('Tartagal', 16);
+
+-- San Juan (id_provincia = 17)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Juan', 17),
+('Rawson', 17),
+('Chimbas', 17);
+
+-- San Luis (id_provincia = 18)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Luis', 18),
+('Villa Mercedes', 18),
+('Merlo', 18);
+
+-- Santa Cruz (id_provincia = 19)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Río Gallegos', 19),
+('Caleta Olivia', 19),
+('El Calafate', 19);
+
+-- Santa Fe (id_provincia = 20)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Santa Fe', 20),
+('Rosario', 20),
+('Rafaela', 20),
+('Venado Tuerto', 20);
+
+-- Santiago del Estero (id_provincia = 21)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Santiago del Estero', 21),
+('La Banda', 21),
+('Termas de Río Hondo', 21);
+
+-- Tierra del Fuego (id_provincia = 22)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Ushuaia', 22),
+('Río Grande', 22),
+('Tolhuin', 22);
+
+-- Tucumán (id_provincia = 23)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Miguel de Tucumán', 23),
+('Tafí Viejo', 23),
+('Yerba Buena', 23);
+
+-- Ciudad Autónoma de Buenos Aires (id_provincia = 24)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Buenos Aires', 24);
+
+
+-- Buenos Aires (id_provincia = 1)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Isidro', 1),
+('Avellaneda', 1),
+('Lomas de Zamora', 1),
+('San Nicolás de los Arroyos', 1),
+('Pergamino', 1),
+('Junín', 1);
+
+-- Catamarca (id_provincia = 2)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Tinogasta', 2),
+('Santa María', 2);
+
+-- Chaco (id_provincia = 3)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Charata', 3),
+('Las Breñas', 3);
+
+-- Chubut (id_provincia = 4)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Esquel', 4),
+('Gaiman', 4);
+
+-- Córdoba (id_provincia = 5)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Alta Gracia', 5),
+('Jesús María', 5),
+('Cosquín', 5);
+
+-- Corrientes (id_provincia = 6)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Ituzaingó', 6),
+('Santo Tomé', 6);
+
+-- Entre Ríos (id_provincia = 7)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Gualeguay', 7),
+('Victoria', 7),
+('Colón', 7);
+
+-- Formosa (id_provincia = 8)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Las Lomitas', 8);
+
+-- Jujuy (id_provincia = 9)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Humahuaca', 9),
+('Tilcara', 9);
+
+-- La Pampa (id_provincia = 10)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Realicó', 10),
+('Guatraché', 10);
+
+-- La Rioja (id_provincia = 11)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Villa Unión', 11),
+('Aimogasta', 11);
+
+-- Mendoza (id_provincia = 12)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Maipú', 12),
+('Malargüe', 12);
+
+-- Misiones (id_provincia = 13)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Vicente', 13),
+('Puerto Iguazú', 13),
+('Apóstoles', 13);
+
+-- Neuquén (id_provincia = 14)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Plottier', 14),
+('Zapala', 14);
+
+-- Río Negro (id_provincia = 15)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Cipolletti', 15),
+('Allen', 15);
+
+-- Salta (id_provincia = 16)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Cafayate', 16),
+('Metán', 16);
+
+-- San Juan (id_provincia = 17)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Pocito', 17),
+('Rivadavia', 17);
+
+-- San Luis (id_provincia = 18)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('La Punta', 18),
+('Juana Koslay', 18);
+
+-- Santa Cruz (id_provincia = 19)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Pico Truncado', 19),
+('Las Heras', 19);
+
+-- Santa Fe (id_provincia = 20)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Reconquista', 20),
+('Esperanza', 20),
+('Sunchales', 20);
+
+-- Santiago del Estero (id_provincia = 21)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Añatuya', 21),
+('Monte Quemado', 21);
+
+-- Tierra del Fuego (id_provincia = 22)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('San Sebastián', 22);
+
+-- Tucumán (id_provincia = 23)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Famaillá', 23),
+('Concepción', 23);
+
+-- Ciudad Autónoma de Buenos Aires (id_provincia = 24)
+-- (No se agregan más porque ya es una única ciudad)
+
+-- Buenos Aires (id_provincia = 1)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Necochea', 1),
+('Pinamar', 1),
+('Villa Gesell', 1),
+('San Pedro', 1),
+('Balcarce', 1),
+('Olavarría', 1);
+
+-- Catamarca (id_provincia = 2)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Hualfín', 2),
+('Los Altos', 2),
+('Recreo', 2);
+
+-- Chaco (id_provincia = 3)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Machagai', 3),
+('Villa Berthet', 3),
+('Puerto Tirol', 3);
+
+-- Chubut (id_provincia = 4)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Lago Puelo', 4),
+('Epuyén', 4),
+('Trevelin', 4);
+
+-- Córdoba (id_provincia = 5)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Mina Clavero', 5),
+('Capilla del Monte', 5),
+('Villa General Belgrano', 5);
+
+-- Corrientes (id_provincia = 6)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Curuzú Cuatiá', 6),
+('Esquina', 6),
+('Alvear', 6);
+
+-- Entre Ríos (id_provincia = 7)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Nogoyá', 7),
+('Federación', 7),
+('La Paz', 7);
+
+-- Formosa (id_provincia = 8)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Ingeniero Juárez', 8),
+('Comandante Fontana', 8);
+
+-- Jujuy (id_provincia = 9)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Purmamarca', 9),
+('La Quiaca', 9),
+('Abra Pampa', 9);
+
+-- La Pampa (id_provincia = 10)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Macachín', 10),
+('Intendente Alvear', 10);
+
+-- La Rioja (id_provincia = 11)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Nonogasta', 11),
+('Famatina', 11);
+
+-- Mendoza (id_provincia = 12)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Tupungato', 12),
+('Tunuyán', 12),
+('San Martín', 12);
+
+-- Misiones (id_provincia = 13)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Montecarlo', 13),
+('San Ignacio', 13),
+('Candelaria', 13);
+
+-- Neuquén (id_provincia = 14)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Villa La Angostura', 14),
+('Añelo', 14);
+
+-- Río Negro (id_provincia = 15)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('El Bolsón', 15),
+('Villa Regina', 15),
+('Choele Choel', 15);
+
+-- Salta (id_provincia = 16)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Cachi', 16),
+('San Antonio de los Cobres', 16),
+('Rosario de la Frontera', 16);
+
+-- San Juan (id_provincia = 17)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Caucete', 17),
+('San Martín', 17);
+
+-- San Luis (id_provincia = 18)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Potrero de los Funes', 18),
+('Carpintería', 18);
+
+-- Santa Cruz (id_provincia = 19)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Puerto Deseado', 19),
+('Los Antiguos', 19),
+('Gobernador Gregores', 19);
+
+-- Santa Fe (id_provincia = 20)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Villa Gobernador Gálvez', 20),
+('San Lorenzo', 20),
+('Casilda', 20);
+
+-- Santiago del Estero (id_provincia = 21)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Frías', 21),
+('Pinto', 21);
+
+-- Tierra del Fuego (id_provincia = 22)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Cabo San Pablo', 22);
+
+-- Tucumán (id_provincia = 23)
+INSERT INTO localidad (nombre, id_provincia) VALUES
+('Monteros', 23),
+('Aguilares', 23);
